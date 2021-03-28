@@ -1,0 +1,145 @@
+---
+title: "Workout Tracker"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+# shiny inputs defined here
+source("globals.R")
+source("includes.R")
+source("helpers.R")
+
+# set up the exercise table
+df <- data.frame(date=character(), name=character(), type=character(),
+                 exercise=character(), weight=double(),
+                 sets=double(), reps=double(), notes=character(),
+                 stringsAsFactors=FALSE)
+
+observeEvent(TRUE, {
+  # authenticate to google sheets
+  flog.info(glue("authenticating with service account={SERVICE_ACCOUNT_JSON_FILE},\
+                  sheets URL ={WORKOUT_TRACKER_GOOGLE_SHEET_URL}"))
+  library(googlesheets4)
+  gs4_auth(
+    path=SERVICE_ACCOUNT_JSON_FILE,
+    scopes="https://www.googleapis.com/auth/spreadsheets"
+  )
+}) 
+
+get_sheet <- reactive({
+  gs4_get(WORKOUT_TRACKER_GOOGLE_SHEET_URL)
+})
+shiny::observeEvent(input$add, {
+  mod_df$x <- mod_df$x %>%
+    dplyr::bind_rows(
+ 
+  dplyr::tibble(date = input$date,
+                name = input$name,
+                type=input$type,
+                exercise = input$exercise,
+                weight=as.numeric(input$weight),
+                sets=as.integer(input$sets),
+                reps=as.integer(input$reps),
+                notes=input$notes))
+  replaceData(proxy, mod_df$x, resetPaging = FALSE)
+})
+  
+shiny::observeEvent(input$save, {
+  flog.info(glue("going to save data of shape {shp(mod_df$x)}"))
+  map(unique(mod_df$x$name), save_data, mod_df$x, get_sheet())
+  last_save_timestamp <- Sys.time()
+})
+
+last_save_timestamp <- ""
+get_last_save_timestamp <- reactive({
+  last_save_timestamp
+})
+mod_df <- shiny::reactiveValues(x = df)
+proxy = dataTableProxy('table')
+```
+
+Sidebar {.sidebar}
+=====================================
+
+```{r}
+renderUI({
+  dateInput("date", "Date:", value = Sys.Date())})
+
+renderUI({
+  selectInput(inputId = "name",
+            label = "Name",
+            choices = get_names())
+})
+
+renderUI({
+  selectInput(inputId = "type",
+              label = "Workout Type",
+              choices = get_exercise_types())
+})
+
+renderUI({
+  selectInput(inputId = "exercise",
+            label = "Exercise",
+            choices = get_exercises())
+})
+
+renderUI({
+  selectInput(inputId = "weight",
+            label = "Weight",
+            choices = get_weights())
+})
+
+renderUI({
+  selectInput(inputId = "sets",
+            label = "Sets",
+            choices = get_sets())
+})
+
+renderUI({
+  selectInput(inputId = "reps",
+            label = "Reps",
+            choices = get_reps())
+})
+
+renderUI({
+  textInput(inputId="notes", label="Notes")
+})
+
+actionButton("add", "Add", icon("plus"), 
+    style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+actionButton("save", "Save", icon("save"), 
+    style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+
+#renderUI({HTML(glue("Workout last save {get_last_save_timestamp()}"))})
+```
+
+Tracker
+=====================================  
+
+### Workouts
+
+```{r}
+DT::DTOutput(outputId = "table")
+output$table <- renderDT({
+  df_user <- read_data(input$name)
+  if(!is.null(df_user)) {
+    if(nrow(df_user) > 0) {
+      df_user <- df_user %>%
+        arrange(desc(date))
+    } else {
+      print(str(df_user))
+    }
+    mod_df$x <- df_user
+  }
+  isolate(mod_df$x)
+}, editable=TRUE)
+```
+   
+Creator
+=====================================     
+
+### Chart 2
+    
+```{r}
+```

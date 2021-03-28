@@ -1,3 +1,6 @@
+# service account
+*.json
+
 # History files
 .Rhistory
 .Rapp.history
